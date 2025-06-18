@@ -1,0 +1,37 @@
+# core data & math
+pandas==2.2.3
+numpy==2.0.2
+scikit-learn==1.6.1
+shap==0.47.2
+
+# plotting / graphing (if used)
+matplotlib==3.9.4
+networkx==3.2.1
+igraph==0.11.8
+python-louvain==0.16
+pyvis==0.3.2
+
+# BigQuery & storage clients
+google-cloud-bigquery==3.31.0
+google-cloud-storage==3.1.0
+
+# GCP auth & low-level
+google-auth==2.40.1
+google-api-core==2.24.2
+google-crc32c==1.7.1
+google-resumable-media==2.7.2
+googleapis-common-protos==1.70.0
+grpcio==1.72.0rc1
+grpcio-status==1.72.0rc1
+
+# I/O helpers
+pyarrow==20.0.0      # if you read/write Parquet
+fsspec==2025.3.2     # for remote filesystems
+db-dtypes==1.4.2     # BigQuery table typing support
+openpyxl / XlsxWriter # only if you write Excel
+
+# misc runtime utils
+requests==2.32.3
+urllib3==2.4.0
+cachetools==5.5.2
+cloudpickle==3.1.1
