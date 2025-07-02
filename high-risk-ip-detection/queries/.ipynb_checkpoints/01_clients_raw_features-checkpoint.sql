@@ -1,5 +1,12 @@
 #standardSQL
 WITH
+
+  -- 0) IP activity features
+  all_events AS (
+    {UNIONED_TABLES}
+  ),
+  
+  
   -- 1) IP activity features
   ip_activity AS (
     SELECT
@@ -13,7 +20,7 @@ WITH
         ip,
         kv18 as appId,
         COUNT(*) AS minutesActive
-      FROM `pixalate.com:pixalate.MEDIAPLANNER_RAW.EventAugmented_{DATE}`
+      FROM all_events
       WHERE 
         kv18 IS NOT NULL
         AND deviceType LIKE '%mobile%'
@@ -48,11 +55,11 @@ WITH
       FROM (
         SELECT
           ip,
-          userId,
+          COALESCE(kv19, kv20, kv21, kv22, visitorId) as userId,
           FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), 'UTC') AS minute,
           COUNT(*) AS total,
           IFNULL(SUM(IF(fraudTypeDev IS NULL, 0, 1)), 0) AS fraudTotal
-        FROM `pixalate.com:pixalate.MEDIAPLANNER_RAW.EventAugmented_{DATE}`
+        FROM all_events
         WHERE 
           kv18 IS NOT NULL
           AND deviceType LIKE '%mobile%'
@@ -80,9 +87,6 @@ WITH
       COUNT(DISTINCT IFNULL(kv19, IFNULL(kv20, IFNULL(kv21, kv22)))) AS totalDevices
     FROM (
       SELECT
-        countryCode,
-        adDomain,
-        pageReferrer,
         kv4,
         s18,
         kv19,
@@ -90,21 +94,17 @@ WITH
         kv21,
         kv22,
         s24,
-        age,
-        browserAgent,
         impressions,
-        s30,
-        s31,
         ip,
         CASE WHEN b3 = TRUE THEN TRUE ELSE FALSE END AS b3,
-        userId,
+        COALESCE(kv19, kv20, kv21, kv22, visitorId) as userId,
         visitorId,
         CAST(eventTime AS BIGNUMERIC) AS eventTime,
         CAST(sessionTime AS BIGNUMERIC) AS sessionTime,
         FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%S', TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), 'UTC') AS second,
         FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), 'UTC') AS minute,
         FORMAT_TIMESTAMP('%Y-%m-%d %H', TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), 'UTC') AS hour
-      FROM `pixalate.com:pixalate.MEDIAPLANNER_RAW.EventAugmented_{DATE}`
+      FROM all_events
       WHERE 
         kv18 IS NOT NULL
         AND deviceType LIKE '%mobile%'
@@ -127,17 +127,17 @@ WITH
     FROM (
       SELECT
         DATE(TIMESTAMP_MICROS(CAST(adInstanceTime AS INT64))) AS date,
-        userId AS deviceId,
+        COALESCE(kv19, kv20, kv21, kv22, visitorId) AS deviceId,
         ip,
         kv18,
-        COUNT(DISTINCT kv18) OVER (PARTITION BY userId) AS totalApps
-      FROM `pixalate.com:pixalate.MEDIAPLANNER_RAW.EventAugmented_{DATE}`
+        COUNT(DISTINCT kv18) OVER (PARTITION BY COALESCE(kv19, kv20, kv21, kv22, visitorId)) AS totalApps
+      FROM all_events
       WHERE 
         kv18 IS NOT NULL
         AND deviceType LIKE '%mobile%'
-        AND FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) >= {DATETIME1}
-        AND FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) < {DATETIME2}
-      GROUP BY date, deviceId, ip, kv18
+        AND FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) >= '2025-06-10 00:00:00'
+        AND FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) < '2025-06-10 04:00:00'
+      GROUP BY date, deviceId, ip, kv18, kv19, kv20, kv21, kv22, visitorId
     )
     GROUP BY ip
   )
@@ -185,5 +185,7 @@ FROM ip_activity ia
 LEFT JOIN device_metrics dm ON ia.ip = dm.ip
 LEFT JOIN technical_features tf ON ia.ip = tf.ip
 LEFT JOIN app_distribution ad ON ia.ip = ad.ip
+
+WHERE dm.total > 5
 
 ORDER BY ia.ip;

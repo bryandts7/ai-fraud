@@ -48,3 +48,4 @@ Thumbs.db
 *.mov
 *.wmv
 
+high-risk-ip-detection/credentials/google_compute_engine_prd.json

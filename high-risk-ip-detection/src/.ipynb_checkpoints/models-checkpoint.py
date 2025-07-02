@@ -13,13 +13,6 @@ class GraphAnomalyDetector:
         # Initialize GPU if available
         if self.use_gpu:
             pass
-            # try:
-            #     self.gpu_df = cudf.DataFrame.from_pandas(df)
-            #     self.gpu_appId_df = cudf.DataFrame.from_pandas(appId_df)
-            #     print("GPU acceleration enabled")
-            # except:
-            #     print("GPU initialization failed, falling back to CPU")
-            #     self.use_gpu = False
 
     @timer
     def create_ip_appid_edges(self):
