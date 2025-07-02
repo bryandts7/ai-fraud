@@ -1,0 +1,38 @@
+project:
+  id: research-1049
+
+bigquery:
+  destination_dataset: BRYAN_TEST
+
+client:
+  name: all_clients
+  csv_folder: flagged_ips
+  
+
+
+feature_engineering:
+ columns_to_stay:
+   - IP
+   - totalPerDevice
+   - ipAvgMinutesActive
+   - ipMinutesActivePerDay50
+   - ipMinutesActivePerDay90
+   - ipMinutesActivePerDay99
+   - deviceIdMinMinutesActive
+   - deviceIdAvgMinutesActive
+   - deviceIdMinutesActivePerDay50
+   - deviceIdMinutesActivePerDay90
+   - deviceIdMinutesActivePerDay99
+   - b3
+   - ttlQ50
+   - ttlQ99
+   - xDeviceUaImpressionRatio
+   - ipMismatchRatio
+   - noKv4InXffRatio
+   - nullDeviceIdRatio
+   - minAppsPerDevice
+   - maxAppsPerDevice
+   - avgAppsPerDevice
+   - totalAppsQ50
+   - totalAppsQ90
+   - totalAppsQ99
