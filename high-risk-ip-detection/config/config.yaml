@@ -1,14 +1,33 @@
+project_pull:
+  id: pixalate.com:pixalate
+  creds: credentials/google_compute_engine_prd.json
+
 project:
   id: research-1049
+  creds: credentials/sa.json
 
 bigquery:
   destination_dataset: BRYAN_TEST
 
+dates:
+  # used for Python’s strftime
+  date_format: "%Y%m%d"
+
+  # placeholders to be filled in at runtime
+  # start_date: "{date}"
+  # start_hour: "{start_hour}"
+  # end_hour: "{start_hour}"
+  start_date: "2025-06-10"
+  start_hour: "04"
+  end_hour: "08"
+  
 client:
   name: all_clients
   csv_folder: flagged_ips
-  
 
+naming:
+  csv_filename: "{client}_flagged_ips_{DATE}_{START_HOUR}_{END_HOUR}.csv"
+  table_prefix_all: "{client}_flagged_ips_{DATE}_{START_HOUR}_{END_HOUR}"
 
 feature_engineering:
  columns_to_stay:

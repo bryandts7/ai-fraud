@@ -49,7 +49,7 @@ def load_query(
     return template.format(**params) if params else template
 
 
-class BigQueryClient:
+class BigQueryClientPull:
     """
     Wrapper around BigQuery + Storage to run queries,
     dry-run for cost estimation, and return pandas DataFrames.
@@ -58,19 +58,19 @@ class BigQueryClient:
     def __init__(self, config_path: str = "config/config.yaml"):
         bundle = load_config(config_path)
         cfg = bundle["config"]
-        project_id = cfg["project"]["id"]
-        credentials_path = cfg["project"]["creds"]
+        project_id = cfg["project_pull"]["id"]
+        credentials_path = cfg["project_pull"]["creds"]
         credentials = service_account.Credentials.from_service_account_file(
                     credentials_path,
                     scopes=["https://www.googleapis.com/auth/cloud-platform"],
                 )
-        
         location = os.getenv(
             "BQ_LOCATION",
             cfg.get("bigquery", {}).get("location", "US")
         )
 
-        self.client = bigquery.Client(project=project_id, location=location, credentials=credentials)
+        self.client = bigquery.Client(project=project_id, location=location, 
+                                      credentials=credentials)
         self.storage_client = bigquery_storage.BigQueryReadClient()
         self.destination_dataset = cfg["bigquery"]["destination_dataset"]
 

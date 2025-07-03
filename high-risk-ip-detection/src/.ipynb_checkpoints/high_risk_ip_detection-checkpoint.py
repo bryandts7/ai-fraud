@@ -6,12 +6,13 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict
 from google.cloud.exceptions import NotFound
 
-from src.config_loader import load_config
-from src.bq_client import BigQueryClient, estimate_query_cost
-from src.models import GraphAnomalyDetector
-from src.writer import write_flagged_apps_to_bq
-from src.utils import ensure_directory, compute_dates, load_configs, get_client_list, filter_existing_clients, get_event_tables_std
-from src.writer import save_anomalies_csv, write_anomalies_bq
+from config_loader import load_config
+from bq_client import BigQueryClient
+from bq_client_pull import BigQueryClientPull
+from models import GraphAnomalyDetector
+from writer import write_flagged_apps_to_bq
+from utils import ensure_directory, compute_dates, load_configs, get_client_list, filter_existing_clients, get_event_tables_std, isolation_forest_to_probability
+from writer import save_anomalies_csv, write_anomalies_bq
 
 # Set up a simple logger
 logging.basicConfig(
@@ -42,10 +43,14 @@ def main():
     start_date = compute_dates(
         cfg["dates"]["date_format"], args.start_date
     )
+    start_hour = cfg["dates"]["start_hour"]
+    end_hour = cfg["dates"]["end_hour"]
     
     context = {
         "DATE"  :  start_date,
         "client":  cfg["client"]["name"],
+        "START_HOUR": start_hour,
+        "END_HOUR" : end_hour
     }
     
     out_dir = cfg["client"]["csv_folder"]
@@ -54,17 +59,17 @@ def main():
 
     logging.info("Initializing BigQuery client")
     bq = BigQueryClient(config_path=args.config)
+    bq_pull = BigQueryClientPull(config_path=args.config)
     
     raw_clients = get_client_list(exclude_test=True)
-    active_clients = filter_existing_clients(bq, raw_clients, start_date)
-    unioned_tables = get_event_tables_std(active_clients, start_date)
+    active_clients = filter_existing_clients(bq_pull, raw_clients, start_date)
+    unioned_tables = get_event_tables_std(active_clients, start_date, start_hour, end_hour)
     
     context["UNIONED_TABLES"] = unioned_tables
     
-    df = bq.run_template(
+    df = bq_pull.run_template(
         "01_clients_raw_features",
         template_params=context,
-        estimate_cost=args.estimate_cost,
     )
     df = df.rename(columns={'ip': 'IP'})
     df_clean = df[cfg["feature_engineering"]["columns_to_stay"]]

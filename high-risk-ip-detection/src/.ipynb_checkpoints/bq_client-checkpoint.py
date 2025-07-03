@@ -9,8 +9,9 @@ from typing import Any, Dict, Optional
 import pandas as pd
 from google.cloud import bigquery
 from google.cloud import bigquery_storage
+from google.oauth2 import service_account
 
-from .config_loader import load_config
+from config_loader import load_config
 
 def estimate_query_cost_bytes(
     bytes_processed: int,
@@ -58,12 +59,18 @@ class BigQueryClient:
         bundle = load_config(config_path)
         cfg = bundle["config"]
         project_id = cfg["project"]["id"]
+        credentials_path = cfg["project"]["creds"]
+        credentials = service_account.Credentials.from_service_account_file(
+                    credentials_path,
+                    scopes=["https://www.googleapis.com/auth/cloud-platform"],
+                )
+        
         location = os.getenv(
             "BQ_LOCATION",
             cfg.get("bigquery", {}).get("location", "US")
         )
 
-        self.client = bigquery.Client(project=project_id, location=location)
+        self.client = bigquery.Client(project=project_id, location=location, credentials=credentials)
         self.storage_client = bigquery_storage.BigQueryReadClient()
         self.destination_dataset = cfg["bigquery"]["destination_dataset"]
 

@@ -41,9 +41,6 @@ def save_anomalies_csv(
 
     Updates `context['variables']` with the slug used.
     """
-    # Build slug and filename
-    variables_slug = cfg['naming']['variables'].format(**context)
-    context['variables'] = variables_slug
 
     csv_name = cfg['naming']['csv_filename'].format(**context)
     file_path = os.path.join(out_dir, csv_name)

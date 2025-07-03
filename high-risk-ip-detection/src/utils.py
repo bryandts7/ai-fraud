@@ -9,7 +9,7 @@ from google.cloud.exceptions import NotFound
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict
-from src.config_loader import load_config
+from config_loader import load_config
 
 def compute_dates(
     date_format: str,
@@ -26,6 +26,37 @@ def compute_dates(
     logging.info(f"Using date window {start_date}")
     return start_date
 
+# def compute_dates(
+#     date_format: str,
+# ) -> Tuple[str, str, int, int]:
+#     """
+#     Compute (start_date) strings and hour ranges.
+#     Returns start_date, today_str, start_hour, end_hour
+#     """
+#     today = datetime.utcnow()
+#     today_str = today.strftime(date_format)
+    
+#     # Define 4-hour intervals: (0,4), (4,8), (8,12), (12,16), (16,20), (20,24)
+#     current_hour = today.hour
+    
+#     # Determine which 4-hour block we're in and round down to the previous complete block
+#     if current_hour < 4:
+#         # If we're in the first block (0-4), we need the previous day's last block (20-24)
+#         start_hour = 20
+#         end_hour = 24
+#         # Use yesterday's date
+#         target_date = today - timedelta(days=1)
+#         start_date = target_date.strftime(date_format)
+#     else:
+#         # For all other blocks, use the previous complete 4-hour block of the same day
+#         block_start = (current_hour // 4) * 4
+#         start_hour = block_start - 4
+#         end_hour = block_start
+#         start_date = today_str
+    
+#     logging.info(f"Using date window {start_date} with hours {start_hour}-{end_hour}")
+#     return start_date, today_str, start_hour, end_hour
+
 def load_query(name: str, params: Optional[Dict[str, Any]] = None) -> str:
     """
     Load a SQL template from the queries/ directory and optionally format it with provided params.
@@ -40,6 +71,12 @@ def load_query(name: str, params: Optional[Dict[str, Any]] = None) -> str:
     template = sql_path.read_text()
     return template.format(**params) if params is not None else template
 
+def load_configs(
+    config_path: str
+) -> Tuple[Dict, Dict]:
+    logging.info("Loading configuration")
+    bundle = load_config(config_path)
+    return bundle["config"]
 
 def save_df_to_csv(
     df: pd.DataFrame,
@@ -117,17 +154,20 @@ def get_event_tables_std(client_list, start_date, start_hour, end_hour):
     project     = "pixalate.com"
     dataset     = "pixalate"
     
-    hour1 = f"{date_suffix} {start_hour}:00:00"
-    hour2 = f"{date_suffix} {end_hour}:00:00"
+    hour1 = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]} {start_hour}:00:00"
+    hour2 = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]} {end_hour}:00:00"
 
     selects = [
         # note the change here: use dots, not colon, inside the backticks
-        f"SELECT ip, kv18, os, eventTime, kv19, kv20, kv21, kv22, visitorId, impressions, kv4, s18, kv19, kv20, kv21, kv22, s24, sessionTime, b3, deviceType, adInstanceTime "
-        f"FROM `{project}:{dataset}.{client_id.upper()}.Event_{date_suffix}`"
-        f"WHERE FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) >= {hour1}"
-        f"AND FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) < {hour2}"
+        f"""
+        SELECT ip, kv18, os, eventTime, kv19, kv20, kv21, kv22, visitorId, impressions, kv4, s18,  s24, sessionTime, b3, deviceType, adInstanceTime 
+        
+        FROM `{project}:{dataset}.{client_id.upper()}.Event_{date_suffix}`
+        WHERE FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) >= "{hour1}"
+        AND FORMAT_TIMESTAMP('%Y-%m-%d %H:00:00', TIMESTAMP_TRUNC(TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), HOUR, 'UTC')) < "{hour2}" """
         for client_id in client_list
     ]
+    
 
     return "\nUNION ALL\n".join(selects)
 

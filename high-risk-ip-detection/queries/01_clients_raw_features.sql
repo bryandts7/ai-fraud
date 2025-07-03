@@ -42,21 +42,18 @@ WITH
       APPROX_QUANTILES(minutesActive, 1000)[OFFSET(990)] AS deviceIdMinutesActivePerDay99,
       SUM(total)  AS total,
       AVG(total) AS totalPerDevice,
-      SUM(fraudTotal) AS fraudTotal
     FROM (
       SELECT
         ip,
         userId,
         COUNT(*) AS minutesActive,
         SUM(total) as total,
-        SUM(fraudTotal) AS fraudTotal
       FROM (
         SELECT
           ip,
           COALESCE(kv19, kv20, kv21, kv22, visitorId) as userId,
           FORMAT_TIMESTAMP('%Y-%m-%d %H:%M', TIMESTAMP_MICROS(CAST(eventTime AS INT64) * 1000), 'UTC') AS minute,
-          COUNT(*) AS total,
-          IFNULL(SUM(IF(fraudTypeDev IS NULL, 0, 1)), 0) AS fraudTotal
+          COUNT(*) AS total
         FROM all_events
         WHERE 
           kv18 IS NOT NULL
@@ -140,7 +137,6 @@ SELECT
   -- Traffic volume metrics
   dm.total,
   dm.totalPerDevice,
-  dm.fraudTotal,
   
   -- IP activity patterns
   ia.ipAvgMinutesActive,

@@ -14,7 +14,6 @@ class GraphAnomalyDetector:
         if self.use_gpu:
             pass
 
-    @timer
     def create_ip_appid_edges(self):
         appid_IP_features = self.appId_IP_df.copy()
         
@@ -27,12 +26,10 @@ class GraphAnomalyDetector:
         return appid_IP_features, feature_cols
         
     
-    @timer
     def create_deviceid_appid_edges(self):
         """Create features for deviceId-appId edges"""
         pass
     
-    @timer
     def detect_anomalies(self, features_df, feature_cols, anomaly_type, contamination=0.3):
         """Detect anomalies using Isolation Forest and LOF"""
         # Extract features for anomaly detection
@@ -105,7 +102,6 @@ class GraphAnomalyDetector:
         return result_df, iso_forest
     
 
-    @timer
     def run(self):
         """Run the entire anomaly detection pipeline"""
         # Create edge features
