@@ -3,7 +3,7 @@ WITH
 
   -- 0) All Data from Event Table
   all_events AS (
-    {UNIONED_TABLES}
+    SELECT * FROM {EVENT_FROM_PING}
   ),
   
   

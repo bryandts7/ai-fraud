@@ -20,6 +20,7 @@ from transform.anomaly_detector import AnomalyDetector
 from load.csv_loader import CSVLoader
 from load.bigquery_loader import BigQueryLoader
 
+from core.utils import generate_list_of_hour
 
 class ETLPipeline:
     """Main ETL Pipeline orchestrator"""
@@ -62,13 +63,17 @@ class ETLPipeline:
             client_fetcher = ClientFetcher(self.config.raw_config)
             raw_clients = client_fetcher.get_active_clients(
                 exclude_test=True,
-                start_date=context['start_date']
+                list_of_hour=context['list_of_hour']
             )
             context['active_clients'] = raw_clients
             self.logger.info(f"Found {len(raw_clients)} active clients")
             
             # Extract features from BigQuery
             extractor = BigQueryExtractor(self.config.raw_config)
+            
+            intermediary_table = extractor.extract_intermediaries(context)
+            context['event_from_ping_table'] = intermediary_table
+            
             raw_data = extractor.extract_features(context)
             
             self.logger.info(f"Extracted {len(raw_data)} records")
@@ -174,8 +179,14 @@ class ETLPipeline:
         
         if start_date is None:
             from datetime import datetime, timedelta
-            yesterday = datetime.utcnow() - timedelta(days=1)
-            start_date = yesterday.strftime(dates_config.get('date_format', '%Y%m%d'))
+            today = datetime.utcnow() 
+            start_date = today.strftime(dates_config.get('date_format', '%Y%m%d'))
+            
+            delay_1_hour = today - timedelta(hours=1)
+            end_hour = delay_1_hour.strftime('%Y%m%d_%H')
+            lookback_period = dates_config.get('lookback_period', 4)
+            list_of_hour = generate_list_of_hour(end_hour, lookback_period)
+            start_hour = list_of_hour[0]
         
         # Convert date format if needed (remove dashes)
         if '-' in start_date:
@@ -183,9 +194,13 @@ class ETLPipeline:
         
         context = {
             'start_date': start_date,
-            'start_hour': dates_config.get('start_hour', '04'),
-            'end_hour': dates_config.get('end_hour', '08'),
-            'client_name': self.config.get('client', {}).get('name', 'all_clients')
+            # 'start_hour': dates_config.get('start_hour', '04'),
+            # 'end_hour': dates_config.get('end_hour', '08'),
+            'start_hour': start_hour,
+            'end_hour': end_hour,
+            'list_of_hour': list_of_hour,
+            'client_name': self.config.get('client', {}).get('name', 'all_clients'),
+            'intermediary_table_name': self.config.get('naming', {}).get('intermediary_table_name')
         }
         
         return context

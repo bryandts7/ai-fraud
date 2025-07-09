@@ -20,8 +20,7 @@ class BigQueryLoader(BaseLoader):
         """Save anomalies to BigQuery table"""
         try:
             # Build table name
-            table_template = self.config.get('naming', {}).get('table_prefix_all',
-                                                              '{client_name}_flagged_ips_{DATE}_{START_HOUR}_{END_HOUR}')
+            table_template = self.config.get('naming', {}).get('table_prefix_all')
             table_name = table_template.format(**context)
             full_table_id = f"{self.dataset}.{table_name}"
             

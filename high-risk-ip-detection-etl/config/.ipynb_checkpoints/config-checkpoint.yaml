@@ -4,12 +4,12 @@
 # Source project configuration (for data extraction)
 project_pull:
   id: "pixalate.com:pixalate"  # Your source BigQuery project ID
-  creds: "../credentials/google_compute_engine_prd.json"  # Path to source project service account
+  creds: "../credentials/google_compute_engine_prd_health.json"  # Path to source project service account
 
 # Destination project configuration (for loading results)
 project:
   id: "research-1049"  # Your destination BigQuery project ID
-  creds: "../credentials/sa.json"  # Path to destination project service account
+  creds: "../credentials/google_compute_engine_prd_health.json"  # Path to destination project service account
 
 # BigQuery configuration
 bigquery:
@@ -19,11 +19,7 @@ bigquery:
 # Date and time configuration
 dates:
   date_format: "%Y%m%d"  # Format for date strings (YYYYMMDD)
-  
-  # Default date settings (can be overridden with --start-date)
-  start_date: "2025-06-10"  # Default start date
-  start_hour: "04"  # Start hour (24-hour format)
-  end_hour: "08"    # End hour (24-hour format)
+  lookback_period: 4
 
 # Client configuration
 client:
@@ -32,11 +28,14 @@ client:
 
 # File naming patterns
 naming:
+  # BigQuery table for Event from Ping
+  intermediary_table_name: "{client_name}_ping_to_event_{start_hour}_{end_hour}"
+  
   # CSV filename template
-  csv_filename: "{client_name}_flagged_ips_{start_date}_{start_hour}_{end_hour}.csv"
+  csv_filename: "{client_name}_flagged_ips_{start_hour}_{end_hour}.csv"
   
   # BigQuery table name template
-  table_prefix_all: "{client_name}_flagged_ips_{start_date}_{start_hour}_{end_hour}"
+  table_prefix_all: "{client_name}_flagged_ips_{start_hour}_{end_hour}"
 
 # Feature engineering configuration
 feature_engineering:

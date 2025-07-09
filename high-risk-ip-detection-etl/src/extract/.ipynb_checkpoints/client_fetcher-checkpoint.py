@@ -1,8 +1,9 @@
-# src/extract/client_fetcher.py
+# src/extract/client_fetcher.py - Updated with ping table functions
 import requests
 import json
 from typing import List, Dict, Any
 import logging
+from datetime import datetime, timedelta
 from google.cloud.exceptions import NotFound
 
 from core.exceptions import ExtractionError
@@ -22,7 +23,7 @@ class ClientFetcher:
             "pingdom", "pixalate", "mf", "tw", "xad", "nad", "pkt", "we"
         }
     
-    def get_active_clients(self, exclude_test: bool = True, start_date: str = None) -> List[str]:
+    def get_active_clients(self, exclude_test: bool = True, list_of_hour: List[str] = None) -> List[str]:
         """Get list of active clients with existing data"""
         try:
             # Get all clients from API
@@ -30,9 +31,9 @@ class ClientFetcher:
             self.logger.info(f"Fetched {len(raw_clients)} clients from API")
             
             # Filter to clients with existing data tables
-            if start_date:
-                active_clients = self._filter_existing_clients(raw_clients, start_date)
-                self.logger.info(f"Filtered to {len(active_clients)} clients with data for {start_date}")
+            if list_of_hour:
+                active_clients = self._filter_existing_clients(raw_clients, list_of_hour)
+                self.logger.info(f"Filtered to {len(active_clients)} clients with data for {list_of_hour[0]} to {list_of_hour[-1]}")
             else:
                 active_clients = raw_clients
                 self.logger.info(f"Using all {len(active_clients)} clients (no date filter)")
@@ -71,48 +72,56 @@ class ClientFetcher:
         except json.JSONDecodeError as e:
             raise ExtractionError(f"Failed to parse client list JSON: {str(e)}") from e
     
-    def _filter_existing_clients(self, client_list: List[str], start_date: str) -> List[str]:
-        """Filter clients to only those with existing data tables"""
+    def _filter_existing_clients(self, client_list: List[str], list_of_hour: List[str]) -> List[str]:
+        """Filter clients to only those with existing data tables for all specified hours."""
         # Import here to avoid circular imports
         from clients.bigquery_client import BigQueryClient
-        
+
         try:
             bq_client = BigQueryClient(self.config)
-            date_suffix = start_date.replace("-", "")
             active_clients = []
-            
+
             project = "pixalate.com"
             dataset = "pixalate"
-            
-            self.logger.debug(f"Checking table existence for {len(client_list)} clients on date {start_date}")
-            
+
+            # The 'start_date' variable was in the original log message but not defined in the function signature.
+            # Assuming it's available in the class instance as self.start_date or similar.
+            # For this example, I'll just use the first item in list_of_hour for logging context.
+            log_date_identifier = list_of_hour[0] if list_of_hour else "N/A"
+            self.logger.debug(f"Checking table existence for {len(client_list)} clients on date {log_date_identifier}")
+
             for client_id in client_list:
-                table_id = f"{project}:{dataset}.{client_id.upper()}.Event_{date_suffix}"
-                
-                try:
-                    # Check if table exists
-                    table = bq_client.get_table(table_id)
+                all_tables_found = True  # Flag to track if all tables exist for the client
+                for date_suffix in list_of_hour:
+                    table_id = f"{project}:{dataset}.{client_id.upper()}.Pings_{date_suffix}"
+
+                    try:
+                        # Check if the specific table exists
+                        bq_client.get_table(table_id)
+                        self.logger.debug(f"✓ Table exists for client {client_id}: {table_id}")
+
+                    except NotFound:
+                        self.logger.debug(f"✗ Client {client_id} table not found: {table_id}. This client will be excluded.")
+                        all_tables_found = False
+                        break  # Exit the inner loop; no need to check other dates for this client
+
+                    except Exception as e:
+                        self.logger.warning(f"Error checking table for client {client_id}: {str(e)}")
+                        all_tables_found = False
+                        break  # Also exclude client on unexpected errors
+
+                # Only append the client_id if all its tables were successfully found
+                if all_tables_found and list_of_hour: # Ensure list_of_hour is not empty
                     active_clients.append(client_id)
-                    
-                    # Optional: Check if table has data
-                    # if self._table_has_data(bq_client, table_id):
-                    #     active_clients.append(client_id)
-                    #     self.logger.debug(f"✓ Client {client_id} has data table: {table_id}")
-                    # else:
-                    #     self.logger.debug(f"✗ Client {client_id} table exists but is empty: {table_id}")
-                        
-                except NotFound:
-                    self.logger.debug(f"✗ Client {client_id} table not found: {table_id}")
-                    continue
-                except Exception as e:
-                    self.logger.warning(f"Error checking table for client {client_id}: {str(e)}")
-                    continue
-            
+                    self.logger.debug(f"✓✓ Client {client_id} has all required tables and has been added to the active list.")
+
             return active_clients
-            
+
         except Exception as e:
             self.logger.error(f"Error filtering existing clients: {str(e)}")
             raise ExtractionError(f"Failed to filter existing clients: {str(e)}") from e
+
+
     
     def _table_has_data(self, bq_client, table_id: str, min_rows: int = 1000) -> bool:
         """Check if a table has sufficient data"""
@@ -188,3 +197,253 @@ class ClientFetcher:
         except Exception as e:
             self.logger.error(f"Failed to generate event tables query: {str(e)}")
             raise ExtractionError(f"Failed to generate event tables query: {str(e)}") from e
+            
+
+    def get_event_tables_from_ping(self, client_list: List[str], list_of_hour: List[str]) -> str:
+        """
+        Returns a UNION ALL of converted Event data from Ping tables for the given clients,
+        using the optimized ping-to-event conversion query.
+        
+        Args:
+            client_list: List of client IDs
+            list_of_hour: List of hour strings in format 'YYYYMMDD_HH'
+            
+        Returns:
+            str: SQL query string with UNION ALL of ping-to-event conversions
+        """
+        try:
+            if not client_list:
+                raise ExtractionError("No clients provided for ping table query")
+            
+            if not list_of_hour:
+                raise ExtractionError("No hours provided for ping table query")
+            
+            self.logger.info(f"Generating ping-to-event query for {len(client_list)} clients, "
+                           f"{len(list_of_hour)} hours")
+            
+            project = "pixalate.com"
+            dataset = "pixalate"
+            
+            # Convert first and last hour to unix timestamps in milliseconds
+            start_hour_str = list_of_hour[0]
+            end_hour_str = list_of_hour[-1]
+            
+            # Parse hour strings and convert to unix timestamps
+            start_datetime = datetime.strptime(start_hour_str, '%Y%m%d_%H')
+            end_datetime = datetime.strptime(end_hour_str, '%Y%m%d_%H')
+            
+            # Add 1 hour to end_datetime to make it exclusive (< condition)
+            end_datetime = end_datetime + timedelta(hours=1)
+            
+            # Convert to unix timestamps in milliseconds
+            start_timestamp = int(start_datetime.timestamp() * 1000)
+            end_timestamp = int(end_datetime.timestamp() * 1000)
+            
+            self.logger.debug(f"Time range: {start_timestamp} to {end_timestamp} (ms)")
+            
+            selects = []
+            
+            for client_id in client_list:
+                # Build the ping table union for this client
+                ping_tables = [f"`{project}:{dataset}.{client_id.upper()}.Pings_{hour}`" 
+                             for hour in list_of_hour]
+                ping_union = "\nUNION ALL\nSELECT * FROM ".join(ping_tables)
+                ping_union = f"SELECT * FROM {ping_union}"
+                
+                selects.append(ping_union)
+                self.logger.debug(f"Added ping query for client {client_id}")
+                
+            # Create the conversion query for all client
+            union_all = "\nUNION ALL\n".join(selects)
+            
+            client_query = f"""
+                SELECT 
+                    SINGLEROW.ip,
+                    SINGLEROW.kv18,
+                    SINGLEROW.os,
+                    SINGLEROW.eventTime,
+                    SINGLEROW.kv19,
+                    SINGLEROW.kv20,
+                    SINGLEROW.kv21,
+                    SINGLEROW.kv22,
+                    SINGLEROW.visitorId,
+                    SINGLEROW.impressions,
+                    SINGLEROW.kv4,
+                    SINGLEROW.s18,
+                    SINGLEROW.s24,
+                    SINGLEROW.sessionTime,
+                    SINGLEROW.b3,
+                    SINGLEROW.deviceType,
+                    SINGLEROW.adInstanceTime
+                FROM (
+                    SELECT 
+                        ip,
+                        kv18,
+                        os,
+                        SAFE_CAST(eventTime as INT64) AS eventTime,
+                        kv19,
+                        kv20,
+                        kv21,
+                        kv22,
+                        visitorId,
+                        SAFE_CAST(impressions as INT64) AS impressions,
+                        kv4,
+                        s18,
+                        s24,
+                        SAFE_CAST(sessionTime as INT64) AS sessionTime,
+                        SAFE_CAST(SAFE_CAST(b3 as INT64) as BOOL) AS b3,
+                        deviceType,
+                        SAFE_CAST(adInstanceTime as INT64) AS adInstanceTime,
+                        -- Keep partition keys for deduplication
+                        IFNULL(adInstanceId, "N/A") AS adInstanceId,
+                        IFNULL(adInstanceTime, "0") AS adInstanceTime_null,
+                        IFNULL(advertiserId, "N/A") AS advertiserId,
+                        IFNULL(campaignId, "N/A") AS campaignId,
+                        IFNULL(clientId, "N/A") AS clientId,
+                        IFNULL(partnerId, "N/A") AS partnerId,
+                        IFNULL(placementId, "N/A") AS placementId,
+                        IFNULL(sessionId, "N/A") AS sessionId,
+                        IFNULL(sessionTime, "0") AS sessionTime_null,
+                        IFNULL(visitorId, "N/A") AS visitorId_null,
+                        IFNULL(visitorTime, "0") AS visitorTime,
+                        ROW_NUMBER() OVER(
+                            PARTITION BY 
+                                adInstanceId, 
+                                adInstanceTime, 
+                                advertiserId, 
+                                campaignId, 
+                                clientId, 
+                                partnerId, 
+                                placementId, 
+                                sessionId, 
+                                sessionTime, 
+                                visitorId, 
+                                visitorTime 
+                            ORDER BY eventTime DESC
+                        ) AS ranking
+                    FROM (
+                        {union_all}
+                    )
+                    WHERE impressions IS NOT NULL
+                        AND IFNULL(SAFE_CAST(adInstanceTime AS INT64), 0) >= {start_timestamp}
+                        AND IFNULL(SAFE_CAST(adInstanceTime AS INT64), 0) < {end_timestamp}
+                ) AS SINGLEROW
+                WHERE ranking = 1"""
+
+
+
+            self.logger.info(f"Generated ping-to-event UNION query for {len(client_list)} clients")
+
+            return client_query
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate ping tables query: {str(e)}")
+            raise ExtractionError(f"Failed to generate ping tables query: {str(e)}") from e
+
+    def validate_ping_table_access(self, client_id: str, hour_string: str) -> bool:
+        """
+        Validate access to a specific client's ping table for a given hour
+        
+        Args:
+            client_id: Client identifier
+            hour_string: Hour in format 'YYYYMMDD_HH'
+            
+        Returns:
+            bool: True if table exists and is accessible
+        """
+        try:
+            from clients.bigquery_client import BigQueryClient
+            
+            bq_client = BigQueryClient(self.config)
+            
+            project = "pixalate.com"
+            dataset = "pixalate"
+            table_id = f"{project}:{dataset}.{client_id.upper()}.Pings_{hour_string}"
+            
+            # Check if table exists
+            table = bq_client.get_table(table_id)
+            
+            self.logger.debug(f"✓ Ping table exists: {table_id}")
+            return True
+            
+        except NotFound:
+            self.logger.debug(f"✗ Ping table not found: {table_id}")
+            return False
+        except Exception as e:
+            self.logger.warning(f"Error checking ping table {table_id}: {str(e)}")
+            return False
+
+    def get_available_ping_hours(self, client_list: List[str], list_of_hour: List[str]) -> Dict[str, List[str]]:
+        """
+        Get available ping table hours for each client
+        
+        Args:
+            client_list: List of client IDs
+            list_of_hour: List of hour strings to check
+            
+        Returns:
+            dict: Mapping of client_id to list of available hours
+        """
+        try:
+            self.logger.info(f"Checking ping table availability for {len(client_list)} clients, "
+                           f"{len(list_of_hour)} hours")
+            
+            available_hours = {}
+            
+            for client_id in client_list:
+                client_hours = []
+                for hour_string in list_of_hour:
+                    if self.validate_ping_table_access(client_id, hour_string):
+                        client_hours.append(hour_string)
+                
+                available_hours[client_id] = client_hours
+                self.logger.debug(f"Client {client_id}: {len(client_hours)}/{len(list_of_hour)} hours available")
+            
+            # Summary logging
+            total_available = sum(len(hours) for hours in available_hours.values())
+            total_possible = len(client_list) * len(list_of_hour)
+            
+            self.logger.info(f"Ping table availability: {total_available}/{total_possible} "
+                           f"({total_available/total_possible*100:.1f}%)")
+            
+            return available_hours
+            
+        except Exception as e:
+            self.logger.error(f"Failed to check ping table availability: {str(e)}")
+            raise ExtractionError(f"Failed to check ping table availability: {str(e)}") from e
+
+    def get_filtered_clients_for_ping(self, client_list: List[str], list_of_hour: List[str], 
+                                    min_coverage: float = 0.8) -> List[str]:
+        """
+        Filter clients that have sufficient ping table coverage
+        
+        Args:
+            client_list: List of client IDs to check
+            list_of_hour: List of hours to check
+            min_coverage: Minimum fraction of hours that must be available (0.0-1.0)
+            
+        Returns:
+            List[str]: Filtered list of clients with sufficient coverage
+        """
+        try:
+            available_hours = self.get_available_ping_hours(client_list, list_of_hour)
+            
+            filtered_clients = []
+            required_hours = int(len(list_of_hour) * min_coverage)
+            
+            for client_id, hours in available_hours.items():
+                coverage = len(hours) / len(list_of_hour)
+                if len(hours) >= required_hours:
+                    filtered_clients.append(client_id)
+                    self.logger.debug(f"✓ Client {client_id}: {coverage:.1%} coverage (accepted)")
+                else:
+                    self.logger.debug(f"✗ Client {client_id}: {coverage:.1%} coverage (rejected)")
+            
+            self.logger.info(f"Filtered clients for ping tables: {len(filtered_clients)}/{len(client_list)} "
+                           f"clients with ≥{min_coverage:.0%} coverage")
+            
+            return filtered_clients
+            
+        except Exception as e:
+            self.logger.error(f"Failed to filter clients for ping: {str(e)}")
+            raise ExtractionError(f"Failed to filter clients for ping: {str(e)}") from e
