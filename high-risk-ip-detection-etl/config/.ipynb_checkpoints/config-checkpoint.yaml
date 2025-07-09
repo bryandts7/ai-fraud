@@ -1,0 +1,91 @@
+# config/config.yaml
+# High-Risk IP Detection ETL Pipeline Configuration
+
+# Source project configuration (for data extraction)
+project_pull:
+  id: "pixalate.com:pixalate"  # Your source BigQuery project ID
+  creds: "../credentials/google_compute_engine_prd.json"  # Path to source project service account
+
+# Destination project configuration (for loading results)
+project:
+  id: "research-1049"  # Your destination BigQuery project ID
+  creds: "../credentials/sa.json"  # Path to destination project service account
+
+# BigQuery configuration
+bigquery:
+  destination_dataset: "BRYAN_TEST"  # Dataset where results will be stored
+  location: "US"  # BigQuery location (US, EU, etc.)
+
+# Date and time configuration
+dates:
+  date_format: "%Y%m%d"  # Format for date strings (YYYYMMDD)
+  
+  # Default date settings (can be overridden with --start-date)
+  start_date: "2025-06-10"  # Default start date
+  start_hour: "04"  # Start hour (24-hour format)
+  end_hour: "08"    # End hour (24-hour format)
+
+# Client configuration
+client:
+  name: "all_clients"  # Client identifier for naming
+  csv_folder: "output"  # Local directory for CSV output
+
+# File naming patterns
+naming:
+  # CSV filename template
+  csv_filename: "{client_name}_flagged_ips_{start_date}_{start_hour}_{end_hour}.csv"
+  
+  # BigQuery table name template
+  table_prefix_all: "{client_name}_flagged_ips_{start_date}_{start_hour}_{end_hour}"
+
+# Feature engineering configuration
+feature_engineering:
+  columns_to_stay:
+    # IP identifier
+    - "IP"
+    
+    # Traffic volume metrics
+    - "totalPerDevice"
+    
+    # IP activity patterns
+    - "ipAvgMinutesActive"
+    - "ipMinutesActivePerDay50"
+    - "ipMinutesActivePerDay90"
+    - "ipMinutesActivePerDay99"
+    
+    # Device activity patterns
+    - "deviceIdMinMinutesActive"
+    - "deviceIdAvgMinutesActive"
+    - "deviceIdMinutesActivePerDay50"
+    - "deviceIdMinutesActivePerDay90"
+    - "deviceIdMinutesActivePerDay99"
+    
+    # Technical and behavioral indicators
+    - "b3"
+    - "ttlQ50"
+    - "ttlQ99"
+    - "xDeviceUaImpressionRatio"
+    - "ipMismatchRatio"
+    - "noKv4InXffRatio"
+    - "nullDeviceIdRatio"
+    
+    # App distribution metrics
+    - "minAppsPerDevice"
+    - "maxAppsPerDevice"
+    - "avgAppsPerDevice"
+    - "totalAppsQ50"
+    - "totalAppsQ90"
+    - "totalAppsQ99"
+
+# Machine learning model configuration
+model:
+  # Isolation Forest parameters
+  contamination: 0.02  # Expected proportion of anomalies (2%)
+  random_state: 42     # For reproducible results
+  n_jobs: -1          # Use all available CPU cores
+  
+  # Anomaly detection thresholds
+  min_traffic_threshold: 5  # Minimum traffic volume to consider
+  
+  # Probability conversion method
+  probability_method: "severity_ranking"  # Options: severity_ranking, percentile_within_anomalies, exponential_severity
