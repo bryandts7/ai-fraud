@@ -20,7 +20,7 @@ class FeatureEngineer(BaseTransformer):
     def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """Prepare features for anomaly detection"""
         try:
-            self.logger.info(f"Starting feature engineering with {len(df)} rows")
+            self.logger.info(f"Starting feature cleaning with {len(df)} rows")
             
             # Select relevant columns
             if self.columns_to_keep:
@@ -46,7 +46,7 @@ class FeatureEngineer(BaseTransformer):
             if final_rows == 0:
                 raise TransformationError("No data remaining after cleaning")
             
-            self.logger.info(f"Feature engineering: {initial_rows} -> {final_rows} rows after cleaning")
+            self.logger.info(f"Feature Cleaning: {initial_rows} -> {final_rows} rows after cleaning")
             
             return df_clean
             

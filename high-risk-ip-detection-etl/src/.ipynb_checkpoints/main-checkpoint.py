@@ -73,6 +73,7 @@ class ETLPipeline:
             
             intermediary_table = extractor.extract_intermediaries(context)
             context['event_from_ping_table'] = intermediary_table
+            self.logger.info("Finishing extract intermediaries table. Starting Feature Engineering Extraction.")
             
             raw_data = extractor.extract_features(context)
             
@@ -97,11 +98,12 @@ class ETLPipeline:
             
             # Anomaly detection
             anomaly_detector = AnomalyDetector(self.config.raw_config)
-            anomalies = anomaly_detector.detect_anomalies(clean_features)
+            anomalies, full_data = anomaly_detector.detect_anomalies(clean_features)
             
             self.logger.info(f"Detected {len(anomalies)} anomalies")
             return {
                 'anomalies': anomalies,
+                'full_data': full_data,
                 'context': extracted_data['context']
             }
             
@@ -116,20 +118,29 @@ class ETLPipeline:
         try:
             anomalies = transformed_data['anomalies']
             context = transformed_data['context']
+            full_data = transformed_data['full_data']
             
             results = {}
             
             # Load to CSV
             csv_loader = CSVLoader(self.config.raw_config)
             csv_path = csv_loader.save_anomalies(anomalies, context)
+            csv_full_data_path = csv_loader.save_full_data(full_data, context)
+            
             results['csv_path'] = csv_path
+            results['csv_full_data_path'] = csv_full_data_path
             self.logger.info(f"CSV saved to: {csv_path}")
+            self.logger.info(f"CSV Full Data saved to: {csv_full_data_path}")
             
             # Load to BigQuery
             bq_loader = BigQueryLoader(self.config.raw_config)
             table_name = bq_loader.save_anomalies(anomalies, context)
+            table_full_data_name = bq_loader.save_full_data(full_data, context)
+            
             results['bq_table'] = table_name
+            results['bq_table_full_data'] = table_full_data_name
             self.logger.info(f"BigQuery table: {table_name}")
+            self.logger.info(f"BigQuery Full Data table: {table_full_data_name}")
             
             self.logger.info("Load phase completed successfully")
             return results
@@ -200,7 +211,7 @@ class ETLPipeline:
             'end_hour': end_hour,
             'list_of_hour': list_of_hour,
             'client_name': self.config.get('client', {}).get('name', 'all_clients'),
-            'intermediary_table_name': self.config.get('naming', {}).get('intermediary_table_name')
+            'intermediary_table_name': self.config.get('naming', {}).get('intermediary_table_name', 'ping_to_event_{client_name}_{start_hour}_{end_hour}')
         }
         
         return context

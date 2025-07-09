@@ -29,13 +29,15 @@ client:
 # File naming patterns
 naming:
   # BigQuery table for Event from Ping
-  intermediary_table_name: "{client_name}_ping_to_event_{start_hour}_{end_hour}"
+  intermediary_table_name: "ping_to_event_{client_name}_{start_hour}_{end_hour}"
   
   # CSV filename template
-  csv_filename: "{client_name}_flagged_ips_{start_hour}_{end_hour}.csv"
+  csv_filename: "flagged_ips_{client_name}_{start_hour}_{end_hour}.csv"
+  csv_full_data_filename: "full_data_ips_anomaly_{client_name}_{start_hour}_{end_hour}.csv"
   
   # BigQuery table name template
-  table_prefix_all: "{client_name}_flagged_ips_{start_hour}_{end_hour}"
+  table_prefix_all: "flagged_ips_{client_name}_{start_hour}_{end_hour}"
+  table_prefix_full_data: "full_data_ips_anomaly_{client_name}_{start_hour}_{end_hour}"
 
 # Feature engineering configuration
 feature_engineering:
